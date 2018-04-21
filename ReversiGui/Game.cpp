@@ -1,104 +1,68 @@
 #include "Game.hpp"
 #include <QBrush>
-
+#include <QDebug>
 Game::Game()
-    : scene{new QGraphicsScene}
-    , chesspieces(board.rows * board.cols)
+    : QGraphicsView()
+    , scene{new GameScene}
 {
     setScene(scene);
-    for (int i = 0; i < board.rows; i++)
-    {
-        for (int j = 0; j < board.cols; j++)
-        {
-            QGraphicsRectItem* rect = new QGraphicsRectItem;
-            rect->setRect(i * pixelSize, j * pixelSize, pixelSize, pixelSize);
-            scene->addItem(rect);
-            rect->setBrush(QBrush(Qt::GlobalColor::gray));
-        }
-    }
-    for (int i = 0, n = chesspieces.size(); i < n; i++)
-    {
-        chesspieces.at(i) = nullptr;
-    }
-    putBlack(4, 3);
-    putWhite(3, 3);
-    putBlack(3, 4);
-    putWhite(4, 4);
 }
 
-void Game::putBlack(int i, int j)
+void GameScene::putBlack(int i, int j)
 {
-    if (board.at(i, j) == BLACK)
+    Chesspiece* chesspiece = chesspieces.at(i * board.cols + j);
+    if (chesspiece == nullptr)
     {
-        return;
+        putChesspiece(BLACK, i, j);
     }
-    else if (board.at(i, j) == WHITE)
+    else if (chesspiece->kind == ChesspieceKind::White)
     {
-        removeChessPiece(i, j);
+        chesspiece->setBlack();
     }
-    putChessPiece(BLACK, i, j);
 }
 
-void Game::putWhite(int i, int j)
+void GameScene::putWhite(int i, int j)
 {
-    if (board.at(i, j) == WHITE)
+    Chesspiece* chesspiece = chesspieces.at(i * board.cols + j);
+    if (chesspiece == nullptr)
     {
-        return;
+        putChesspiece(WHITE, i, j);
     }
-    else if (board.at(i, j) == BLACK)
+    else if (chesspiece->kind == ChesspieceKind::Black)
     {
-        removeChessPiece(i, j);
+        chesspiece->setWhite();
     }
-    putChessPiece(WHITE, i, j);
 }
 
-void Game::putChessPiece(int kind, int i, int j)
+void GameScene::putChesspiece(int kind, int i, int j)
 {
     board.at(i, j) = kind;
-    QGraphicsEllipseItem* ellipse = new QGraphicsEllipseItem;
-    ellipse->setRect(i * pixelSize, j * pixelSize, pixelSize, pixelSize);
+    Chesspiece* chesspiece = new Chesspiece;
+    chesspiece->setRect(i * pixelSize, j * pixelSize, pixelSize, pixelSize);
     if (kind == BLACK)
     {
-        ellipse->setBrush(QBrush(Qt::GlobalColor::black));
+        chesspiece->setBlack();
     }
     else
     {
-        ellipse->setBrush(QBrush(Qt::GlobalColor::white));
+        chesspiece->setWhite();
     }
-    chesspieces.at(i * board.cols + j) = ellipse;
-    scene->addItem(ellipse);
+    chesspieces.at(i * board.cols + j) = chesspiece;
+    addItem(chesspiece);
 }
 
-void Game::removeChessPiece(int i, int j)
+void GameScene::removeChessPiece(int i, int j)
 {
-    QGraphicsEllipseItem* item = chesspieces.at(i * board.cols + j);
-    if (item != nullptr)
+    Chesspiece* chesspiece = chesspieces.at(i * board.cols + j);
+    if (chesspiece != nullptr)
     {
-        scene->removeItem(item);
-        delete item;
+        removeItem(chesspiece);
+        delete chesspiece;
         chesspieces.at(i * board.cols + j) = nullptr;
     }
 }
 
-void Game::mousePressEvent(QMouseEvent* event)
-{
-    static int player = WHITE;
-    QPoint position = event->pos();
-    int i = position.x() / pixelSize;
-    int j = position.y() / pixelSize;
-    if (!board.canMove(player))
-    {
-        player = -player;
-    }
-    if (board.isLegalMove(i, j, player))
-    {
-        board.reverse(i, j, player);
-        refresh();
-        player = -player;
-    }
-}
-
-void Game::refresh()
+void GameScene::refresh()
 {
     for (int i = 0; i < board.rows; i++)
     {
@@ -106,13 +70,11 @@ void Game::refresh()
         {
             if (board.at(i, j) == BLACK)
             {
-                removeChessPiece(i, j);
-                putChessPiece(BLACK, i, j);
+                putBlack(i, j);
             }
             else if (board.at(i, j) == WHITE)
             {
-                removeChessPiece(i, j);
-                putChessPiece(WHITE, i, j);
+                putWhite(i, j);
             }
             else
             {
@@ -120,4 +82,126 @@ void Game::refresh()
             }
         }
     }
+}
+
+void GameScene::computerMove()
+{
+}
+
+GameScene::GameScene()
+    : QGraphicsScene()
+    , chesspieces(board.rows * board.cols)
+    , status{new GameStatus}
+{
+    for (int i = 0; i < board.rows; i++)
+    {
+        for (int j = 0; j < board.cols; j++)
+        {
+            QGraphicsRectItem* rect = new QGraphicsRectItem;
+            rect->setRect(i * pixelSize, j * pixelSize, pixelSize, pixelSize);
+            addItem(rect);
+            rect->setBrush(QBrush(Qt::GlobalColor::gray));
+        }
+    }
+    for (int i = 0, n = chesspieces.size(); i < n; i++)
+    {
+        chesspieces.at(i) = nullptr;
+    }
+
+    initializeView();
+}
+
+void GameScene::initializeView()
+{
+    putBlack(4, 3);
+    putWhite(3, 3);
+    putBlack(3, 4);
+    putWhite(4, 4);
+    addItem(status);
+    status->setPos(0, pixelSize * 8);
+    status->showScore(board.whiteCount(), board.blackCount(),
+                      QString("White moves"));
+}
+
+void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event)
+{
+    static int player = WHITE;
+    if (player == BLACK)
+    {
+        if (!board.canMove(player))
+        {
+            player = -player;
+        }
+        else
+        {
+            status->showScore(board.whiteCount(), board.blackCount(),
+                              player == WHITE ? QString("White moves")
+                                              : QString("Black moves"));
+            int move = chooseMove(board, player);
+            qDebug() << "move = " << move << endl;
+            if (move != -1)
+            {
+                board.reverse(move / board.cols, move % board.cols, player);
+                refresh();
+            }
+            player = -player;
+
+            status->showScore(board.whiteCount(), board.blackCount(),
+                              player == WHITE ? QString("White moves")
+                                              : QString("Black moves"));
+            return;
+        }
+    }
+    QPointF position = event->scenePos();
+    int x = static_cast<int>(position.x());
+    int y = static_cast<int>(position.y());
+    int i = x / pixelSize;
+    int j = y / pixelSize;
+    if (board.isVaildPosition(i, j))
+    {
+        if (!board.canMove(player))
+        {
+            player = -player;
+        }
+        else if (board.isLegalMove(i, j, player))
+        {
+            board.reverse(i, j, player);
+            refresh();
+            player = -player;
+        }
+        status->showScore(board.whiteCount(), board.blackCount(),
+                          player == WHITE ? QString("White moves")
+                                          : QString("Black moves"));
+    }
+}
+
+GameStatus::GameStatus()
+    : QGraphicsTextItem()
+{
+}
+
+void GameStatus::showScore(int white, int black, QString text)
+{
+    QString message = QString("white: ") + QString::number(white) +
+                      QString(" black: ") + QString::number(black) +
+                      QString(" ") + text;
+    setPlainText(message);
+}
+
+Chesspiece::Chesspiece()
+    : QGraphicsEllipseItem()
+    , kind{ChesspieceKind::Black}
+{
+}
+
+void Chesspiece::setWhite()
+{
+    kind = ChesspieceKind::White;
+    setBrush(QBrush(Qt::GlobalColor::white));
+}
+
+void Chesspiece::setBlack()
+{
+    kind = ChesspieceKind::Black;
+    setBrush(QBrush(Qt::GlobalColor::black));
 }
