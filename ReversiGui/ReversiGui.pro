@@ -29,7 +29,8 @@ SOURCES += \
     Board.cpp
 
 HEADERS += \
+    Grid.hpp \
     Game.hpp \
-    Board.hpp
+    Board.hpp \
 
 FORMS +=
